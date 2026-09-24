@@ -1,17 +1,20 @@
-import type { ReactNode } from 'react'
+import { useState } from 'react'
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
-  type TextInputProps,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Ionicons } from '@expo/vector-icons'
+import { useSignIn } from '@clerk/expo'
+import { useRouter } from 'expo-router'
 
 /*
   Palette (dark: petrol + amber)
@@ -25,31 +28,6 @@ import { Ionicons } from '@expo/vector-icons'
 const PETROL = '#0B1F22'
 const TEXT = '#EAF2F0'
 const MUTED = '#8FA9A8'
-
-type FieldProps = TextInputProps & {
-  label: string
-  icon: keyof typeof Ionicons.glyphMap
-  right?: ReactNode
-}
-
-function Field({ label, icon, right, ...inputProps }: FieldProps) {
-  return (
-    <View>
-      <Text className="mb-2 text-[13px] font-medium text-[#8FA9A8]">{label}</Text>
-      <View className="h-14 flex-row items-center rounded-2xl border border-[#24474D] bg-[#12292D] px-4">
-        <Ionicons name={icon} size={20} color={MUTED} />
-        <TextInput
-          {...inputProps}
-          placeholderTextColor="#5F7B7C"
-          selectionColor="#F5B94A"
-          cursorColor="#F5B94A"
-          className="ml-3 flex-1 py-0 text-base text-[#EAF2F0]"
-        />
-        {right}
-      </View>
-    </View>
-  )
-}
 
 function SocialButton({
   icon,
@@ -81,6 +59,37 @@ function Rings() {
 }
 
 export default function SignIn() {
+  const { signIn, errors, fetchStatus } = useSignIn()
+  const router = useRouter()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  const isLoading = fetchStatus === 'fetching'
+
+  const onSignInPress = async () => {
+    const { error } = await signIn.password({
+      emailAddress: email,
+      password,
+    })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    if (signIn.status === 'complete') {
+      await signIn.finalize({
+        navigate: () => router.replace('/'),
+      })
+    } else if (signIn.status === 'needs_second_factor') {
+      // MFA is enabled for this account — handle the second factor here.
+      alert('This account requires a second verification step.')
+    } else {
+      console.error('Sign-in attempt not complete:', signIn)
+    }
+  }
+
   return (
     <View className="flex-1 bg-[#0B1F22]">
       <StatusBar style="light" />
@@ -113,16 +122,48 @@ export default function SignIn() {
 
             {/* Form */}
             <View className="mt-8 gap-4">
-              <Field label="Email" icon="mail-outline" placeholder="you@example.com" />
-
+              {/* Email */}
               <View>
-                <Field
-                  label="Password"
-                  icon="lock-closed-outline"
-                  placeholder="Your password"
-                  secureTextEntry
-                  right={<Ionicons name="eye-outline" size={20} color={MUTED} />}
-                />
+                <Text className="mb-2 text-[13px] font-medium text-[#8FA9A8]">Email</Text>
+                <View className="h-14 flex-row items-center rounded-2xl border border-[#24474D] bg-[#12292D] px-4">
+                  <Ionicons name="mail-outline" size={20} color={MUTED} />
+                  <TextInput
+                    placeholder="you@example.com"
+                    placeholderTextColor="#5F7B7C"
+                    selectionColor="#F5B94A"
+                    cursorColor="#F5B94A"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={email}
+                    onChangeText={setEmail}
+                    className="ml-3 flex-1 py-0 text-base text-[#EAF2F0]"
+                  />
+                </View>
+                {errors?.fields?.identifier && (
+                  <Text className="mt-2 text-red-500">{errors.fields.identifier.message}</Text>
+                )}
+              </View>
+
+              {/* Password */}
+              <View>
+                <Text className="mb-2 text-[13px] font-medium text-[#8FA9A8]">Password</Text>
+                <View className="h-14 flex-row items-center rounded-2xl border border-[#24474D] bg-[#12292D] px-4">
+                  <Ionicons name="lock-closed-outline" size={20} color={MUTED} />
+                  <TextInput
+                    placeholder="Your password"
+                    placeholderTextColor="#5F7B7C"
+                    selectionColor="#F5B94A"
+                    cursorColor="#F5B94A"
+                    secureTextEntry
+                    value={password}
+                    onChangeText={setPassword}
+                    className="ml-3 flex-1 py-0 text-base text-[#EAF2F0]"
+                  />
+                  <Ionicons name="eye-outline" size={20} color={MUTED} />
+                </View>
+                {errors?.fields?.password && (
+                  <Text className="mt-2 text-red-500">{errors.fields.password.message}</Text>
+                )}
                 <Text className="mt-3 self-end text-sm font-medium text-[#F5B94A]">
                   Forgot password?
                 </Text>
@@ -130,9 +171,17 @@ export default function SignIn() {
             </View>
 
             {/* Primary action */}
-            <Pressable className="mt-6 h-14 items-center justify-center rounded-2xl bg-[#F5B94A] active:opacity-90">
-              <Text className="text-base font-semibold text-[#0B1F22]">Log in</Text>
-            </Pressable>
+            <TouchableOpacity
+              onPress={onSignInPress}
+              disabled={isLoading}
+              className="mt-6 h-14 items-center justify-center rounded-2xl bg-[#F5B94A] active:opacity-90"
+            >
+              {isLoading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text className="text-base font-semibold text-[#0B1F22]">Log in</Text>
+              )}
+            </TouchableOpacity>
 
             {/* Social */}
             <View className="my-6 flex-row items-center gap-3">
